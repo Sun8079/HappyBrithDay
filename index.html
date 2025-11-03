@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Happy Birthday App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+
+  <style>
+    .hidden { display: none; }
+    .gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .gallery-item { width: 150px; cursor: pointer; }
+    .gallery-img { width: 100%; border-radius: 8px; object-fit: cover; }
+    .lightbox {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .lightbox img { max-width: 90%; max-height: 80%; border-radius: 10px; }
+    .lightbox button {
+      position: absolute; top:50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.5); border:none; padding:10px; font-size:20px; cursor:pointer;
+    }
+    .prev-btn { left: 20px; }
+    .next-btn { right: 20px; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-purple-500 via-pink-400 to-yellow-300 flex flex-col items-center p-6 font-sans">
+
+  <h1 class="text-3xl font-bold mb-6">🎉 Happy Birthday App 🎉</h1>
+
+  <!-- Nav buttons -->
+  <div class="flex gap-4 mb-6">
+    <button id="createPageBtn" class="bg-white px-4 py-2 rounded shadow">Create Birthday</button>
+    <button id="viewPageBtn" class="bg-white px-4 py-2 rounded shadow">View Birthday</button>
+  </div>
+
+  <!-- Create Birthday Form -->
+  <div id="createPage" class="page hidden">
+    <div class="flex flex-col gap-3 mb-4">
+      <input id="nameInput" type="text" placeholder="Name" class="p-2 rounded border" />
+      <input id="ageInput" type="number" placeholder="Age" class="p-2 rounded border" />
+      <input id="imagesInput" type="file" multiple accept="image/*" class="p-2 rounded border" />
+      <button id="generateCodeBtn" class="bg-green-500 text-white px-4 py-2 rounded">Generate Code & Create</button>
+    </div>
+    <p id="generatedCode" class="font-bold text-white"></p>
+  </div>
+
+  <!-- View Birthday Form -->
+  <div id="viewPage" class="page hidden">
+    <div class="flex gap-3 mb-4">
+      <input id="codeInput" type="text" placeholder="Enter Code" class="p-2 rounded border" />
+      <button id="showBtn" class="bg-blue-500 text-white px-4 py-2 rounded">Show Birthday</button>
+    </div>
+    <p id="displayNameView" class="text-white font-bold mb-4"></p>
+    <div id="gallery" class="gallery"></div>
+  </div>
+
+  <!-- Lightbox popup -->
+  <div id="lightbox" class="lightbox">
+    <button class="prev-btn">&lt;</button>
+    <img src="" alt="preview">
+    <button class="next-btn">&gt;</button>
+  </div>
+
+  <script>
+    // โหลดข้อมูลจาก localStorage
+    let birthdayData = JSON.parse(localStorage.getItem('birthdayData') || '{}');
+
+    // Page navigation
+    const createPageBtn = document.getElementById('createPageBtn');
+    const viewPageBtn = document.getElementById('viewPageBtn');
+    const createPage = document.getElementById('createPage');
+    const viewPage = document.getElementById('viewPage');
+
+    createPageBtn.addEventListener('click', () => {
+      createPage.classList.remove('hidden');
+      viewPage.classList.add('hidden');
+    });
+
+    viewPageBtn.addEventListener('click', () => {
+      viewPage.classList.remove('hidden');
+      createPage.classList.add('hidden');
+    });
+
+    // Create Birthday
+    const nameInput = document.getElementById('nameInput');
+    const ageInput = document.getElementById('ageInput');
+    const imagesInput = document.getElementById('imagesInput');
+    const generateCodeBtn = document.getElementById('generateCodeBtn');
+    const generatedCode = document.getElementById('generatedCode');
+
+    generateCodeBtn.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      const age = ageInput.value.trim();
+      const files = Array.from(imagesInput.files);
+
+      if (!name || !age || files.length === 0) {
+        alert("Please enter name, age and select at least 1 image.");
+        return;
+      }
+
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+
+      const promises = files.map(file => {
+        return new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(promises).then(urls => {
+        birthdayData[code] = { name, age, images: urls };
+        localStorage.setItem('birthdayData', JSON.stringify(birthdayData));
+
+        generatedCode.textContent = `Birthday created! Your code: ${code}`;
+
+        nameInput.value = '';
+        ageInput.value = '';
+        imagesInput.value = '';
+      });
+    });
+
+    // View Birthday
+    const codeInput = document.getElementById('codeInput');
+    const showBtn = document.getElementById('showBtn');
+    const displayNameView = document.getElementById('displayNameView');
+    const gallery = document.getElementById('gallery');
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = lightbox.querySelector('img');
+    const prevBtn = lightbox.querySelector('.prev-btn');
+    const nextBtn = lightbox.querySelector('.next-btn');
+
+    let images = [];
+    let currentIndex = 0;
+
+    showBtn.addEventListener('click', () => {
+      const code = codeInput.value.trim();
+      const data = birthdayData[code];
+
+      gallery.innerHTML = '';
+      displayNameView.textContent = '';
+
+      if (!data) {
+        alert("Code not found!");
+        return;
+      }
+
+      displayNameView.textContent = `${data.name} is ${data.age} years old!`;
+      images = data.images;
+      currentIndex = 0;
+
+      data.images.forEach((url, i) => {
+        const div = document.createElement('div');
+        div.className = "gallery-item";
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = "birthday";
+        img.className = "gallery-img";
+
+        div.appendChild(img);
+        gallery.appendChild(div);
+
+        div.addEventListener('click', () => {
+          lightboxImg.src = url;
+          lightbox.style.display = 'flex';
+          currentIndex = i;
+        });
+      });
+    });
+
+    // Lightbox controls
+    prevBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      lightboxImg.src = images[currentIndex];
+    });
+
+    nextBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      currentIndex = (currentIndex + 1) % images.length;
+      lightboxImg.src = images[currentIndex];
+    });
+
+    lightbox.addEventListener('click', () => {
+      lightbox.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
